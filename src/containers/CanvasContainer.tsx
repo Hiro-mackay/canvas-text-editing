@@ -7,7 +7,8 @@ import { TextAdd } from '../components/TextAdd';
 export const CanvasContainer = () => {
   const [app, setApp] = useState<PIXI.Application>(null);
   const [text, setText] = useState('');
-  const [textElement, setTextElement] = useState<PIXI.Text>(null);
+  const [elements, setElements] = useState<PIXI.Text[]>([]);
+  const [targetElement, setTargetElement] = useState<PIXI.Text>(null);
 
   const initApp = (ref: HTMLCanvasElement) => {
     const _app = new PIXI.Application({
@@ -18,12 +19,42 @@ export const CanvasContainer = () => {
   };
 
   const inputValue = (inputText: string) => {
-    if (!textElement) return;
+    if (!targetElement) return;
     setText(inputText);
-    textElement.text = inputText;
+    targetElement.text = inputText;
 
-    textElement.texture.update();
+    targetElement.texture.update();
   };
+
+  function onSelected(event) {
+    console.log(event.currentTarget)
+    console.log(event.currentTarget.text)
+    setTargetElement(event.currentTarget);
+    setText(event.currentTarget.text);
+    this.data = event.data;
+    this.dragging = true;
+  }
+
+  function onDragStart(event) {
+    this.data = event.data;
+    this.alpha = 0.5;
+    this.dragging = true;
+  }
+
+  function onDragEnd() {
+    this.alpha = 1;
+    this.dragging = false;
+    // set the interaction data to null
+    this.data = null;
+  }
+
+  function onDragMove() {
+    if (this.dragging) {
+      const newPosition = this.data.getLocalPosition(this.parent);
+      this.x = newPosition.x;
+      this.y = newPosition.y;
+    }
+  }
 
   const addTextElement = () => {
     const style = new PIXI.TextStyle({
@@ -48,9 +79,19 @@ export const CanvasContainer = () => {
     element.x = 200;
     element.y = 200;
 
+    element.interactive = true;
+    element.buttonMode = true;
+    element.anchor.set(0.5);
+
+    element
+      .on('pointerdown', onSelected)
+      .on('pointerup', onDragEnd)
+      .on('pointerupoutside', onDragEnd)
+      .on('pointermove', onDragMove);
+
     app.stage.addChild(element);
 
-    setTextElement(element);
+    setElements([...elements, element]);
   };
 
   return (

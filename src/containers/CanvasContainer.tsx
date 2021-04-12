@@ -1,14 +1,35 @@
-import { useEffect, useState } from 'react';
+import { ChangeEventHandler, useEffect, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { Cavnas } from '../components/Cavnas';
 import { TextInput } from '../components/TextInput';
 import { TextAdd } from '../components/TextAdd';
 
+interface Text {
+  id: number;
+  inTime: number;
+  outTime: number;
+  deltaStart: number;
+  element: PIXI.Text;
+}
+
+let delta = 0;
+
+let id = 0;
+
+let paused = true;
+let firstTime = 0;
+let currentTime = 0;
+let deltaTime = 0;
+let layers: Text[] = [];
+
+let renderer: number[] = [];
+
 export const CanvasContainer = () => {
   const [app, setApp] = useState<PIXI.Application>(null);
   const [text, setText] = useState('');
-  const [elements, setElements] = useState<PIXI.Text[]>([]);
-  const [targetElement, setTargetElement] = useState<PIXI.Text>(null);
+  const [textElement, setTextElement] = useState<PIXI.Text>(null);
+  const [textElements, setTextElements] = useState<Text[]>([]);
+  const [time, setTime] = useState(0);
 
   const initApp = (ref: HTMLCanvasElement) => {
     const _app = new PIXI.Application({
@@ -19,25 +40,20 @@ export const CanvasContainer = () => {
   };
 
   const inputValue = (inputText: string) => {
-    if (!targetElement) return;
+    if (!textElement) return;
     setText(inputText);
-    targetElement.text = inputText;
+    textElement.text = inputText;
 
-    targetElement.texture.update();
+    textElement.texture.update();
   };
 
   function onSelected(event) {
-    console.log(event.currentTarget)
-    console.log(event.currentTarget.text)
-    setTargetElement(event.currentTarget);
+    console.log(event.currentTarget);
+    console.log(event.currentTarget.text);
+    setTextElement(event.currentTarget);
+
     setText(event.currentTarget.text);
     this.data = event.data;
-    this.dragging = true;
-  }
-
-  function onDragStart(event) {
-    this.data = event.data;
-    this.alpha = 0.5;
     this.dragging = true;
   }
 
@@ -60,21 +76,12 @@ export const CanvasContainer = () => {
     const style = new PIXI.TextStyle({
       fontFamily: 'Arial',
       fontSize: 36,
-      fontStyle: 'italic',
       fontWeight: 'bold',
-      fill: ['#ffffff', '#00ff99'], // gradient
-      stroke: '#4a1850',
+      fill: '#ffffff',
       strokeThickness: 5,
-      dropShadow: true,
-      dropShadowColor: '#000000',
-      dropShadowBlur: 4,
-      dropShadowAngle: Math.PI / 6,
-      dropShadowDistance: 6,
-      wordWrap: true,
-      wordWrapWidth: 440,
       lineJoin: 'round'
     });
-    const element = new PIXI.Text('入力してください', style);
+    const element = new PIXI.Text(`${id}`, style);
 
     element.x = 200;
     element.y = 200;
@@ -89,16 +96,117 @@ export const CanvasContainer = () => {
       .on('pointerupoutside', onDragEnd)
       .on('pointermove', onDragMove);
 
-    app.stage.addChild(element);
+    const elm: Text = {
+      id: id++,
+      inTime: 0,
+      outTime: 1000,
+      deltaStart: delta,
+      element: element
+    };
+    delta += 1000;
+    setTextElements([...textElements, elm]);
 
-    setElements([...elements, element]);
+    render(elm);
+  };
+
+  const update = (time: number) => {
+    if (paused) {
+      return;
+    }
+
+    if (firstTime === 0) {
+      firstTime = time;
+    }
+
+    currentTime = time - firstTime + deltaTime;
+    setTime(currentTime);
+
+    layers = layers.filter((element) => {
+      if (element.deltaStart + element.outTime < currentTime) {
+        app.stage.removeChild(element.element);
+        return false;
+      }
+      return true;
+    });
+
+    renderer = layers.map((layer) => layer.id);
+
+    textElements.forEach((element) => {
+      if (element.deltaStart + element.inTime <= currentTime && currentTime < element.deltaStart + element.outTime) {
+        if (!renderer.includes(element.id)) {
+          console.log('add');
+          layers.push(element);
+          renderer.push(element.id);
+          app.stage.addChild(element.element);
+        }
+      }
+    });
+  };
+
+  const _loop = (time) => {
+    if (paused) return;
+    update(time);
+    requestAnimationFrame(_loop);
+  };
+
+  const loop = () => {
+    requestAnimationFrame(_loop);
+  };
+
+  const play = () => {
+    if (!paused) return;
+    paused = false;
+    loop();
+  };
+
+  const pause = () => {
+    paused = true;
+    firstTime = 0;
+    deltaTime += currentTime;
+    currentTime = 0;
+    setTime(deltaTime);
+  };
+
+  const stop = () => {
+    paused = true;
+    firstTime = 0;
+    currentTime = 0;
+    setTime(currentTime);
+    app.stage.removeChildren();
+
+    layers = textElements.filter((elm) => {
+      render(elm);
+    });
+
+    renderer = layers.map((layer) => {
+      return layer.id;
+    });
+  };
+
+  const render = (element: Text) => {
+    if (element.deltaStart + element.inTime <= currentTime && currentTime < element.deltaStart + element.outTime) {
+      app.stage.addChild(element.element);
+      return true;
+    }
+    return false;
   };
 
   return (
     <div>
       <Cavnas initApp={initApp} />
+      <p>{time}</p>
       <TextInput value={text} input={inputValue} />
       <TextAdd add={addTextElement} />
+
+      <p className="p-5">
+        <button onClick={play}>再生</button>
+      </p>
+      <p className="p-5">
+        <button onClick={pause}>ポーズ</button>
+      </p>
+      <p className="p-5">
+        <button onClick={stop}>停止</button>
+      </p>
     </div>
   );
 };

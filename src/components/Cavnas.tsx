@@ -13,8 +13,21 @@ export const Cavnas: FC<CavnasProps> = memo(({ initApp }) => {
     initApp(ref.current);
   }, [ref]);
   return (
-    <canvas width="500" height="400" ref={ref}>
-      Renderer Cavnas
-    </canvas>
+    <div className="w-full relative" style={{ paddingTop: '56.25%' }}>
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)'
+        }}
+      >
+        <canvas ref={ref} className="w-full h-full bg-white">
+          Canvas viewer
+        </canvas>
+      </div>
+    </div>
   );
 });

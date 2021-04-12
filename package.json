@@ -10,6 +10,7 @@
     "tailwind:build": "NODE_ENV=production npx tailwindcss-cli@latest build src/styles/tailwind.css -o src/styles/tailwind.compiled.css"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.9.7",
     "@tailwindcss/postcss7-compat": "^2.1.0",
     "next": "10.1.3",
     "pixi.js": "^6.0.2",

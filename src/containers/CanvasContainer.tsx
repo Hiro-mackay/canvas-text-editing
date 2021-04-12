@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { Cavnas } from '../components/Cavnas';
 import { TextInput } from '../components/TextInput';
 import { TextAdd } from '../components/TextAdd';
+import { Texture } from 'pixi.js';
 
 interface Text {
   id: number;
@@ -16,13 +17,43 @@ let delta = 0;
 
 let id = 0;
 
-let paused = true;
-let firstTime = 0;
-let currentTime = 0;
-let deltaTime = 0;
 let layers: Text[] = [];
-
+let currentTime = 0;
 let renderer: number[] = [];
+
+// Video Elementを作成し、video pathを読み込ませる
+const loadVideoRef = (pathVideo: string) => {
+  const video = document.createElement('video');
+  video.crossOrigin = 'anonymous';
+  video.preload = '';
+  video.src = pathVideo;
+
+  return video;
+};
+
+// ファイルからpathを生成する
+const loadVideoPath = (file: File) => URL.createObjectURL(file);
+
+const loadVideoElement = (file: File) => {
+  const path = loadVideoPath(file);
+  const video = loadVideoRef(path);
+  return video;
+};
+
+const loadVideo = (file: File): Promise<HTMLVideoElement> => {
+  const video = loadVideoElement(file);
+
+  return new Promise((resolve, reject) => {
+    video.play().then(() => {
+      video.pause();
+      resolve(video);
+    });
+  });
+};
+
+const loadVideoTexture = (video: HTMLVideoElement) => {
+  return PIXI.Texture.from(video);
+};
 
 export const CanvasContainer = () => {
   const [app, setApp] = useState<PIXI.Application>(null);
@@ -30,11 +61,13 @@ export const CanvasContainer = () => {
   const [textElement, setTextElement] = useState<PIXI.Text>(null);
   const [textElements, setTextElements] = useState<Text[]>([]);
   const [time, setTime] = useState(0);
+  const [sprite, setSprite] = useState<PIXI.Sprite>(null);
+  const [video, setVideo] = useState<HTMLVideoElement>(null);
 
   const initApp = (ref: HTMLCanvasElement) => {
     const _app = new PIXI.Application({
       view: ref,
-      backgroundColor: 0x17184b
+      backgroundColor: 0x333333
     });
     setApp(_app);
   };
@@ -110,19 +143,10 @@ export const CanvasContainer = () => {
   };
 
   const update = (time: number) => {
-    if (paused) {
-      return;
-    }
-
-    if (firstTime === 0) {
-      firstTime = time;
-    }
-
-    currentTime = time - firstTime + deltaTime;
-    setTime(currentTime);
+    setTime(time);
 
     layers = layers.filter((element) => {
-      if (element.deltaStart + element.outTime < currentTime) {
+      if (element.deltaStart + element.outTime < time) {
         app.stage.removeChild(element.element);
         return false;
       }
@@ -132,7 +156,7 @@ export const CanvasContainer = () => {
     renderer = layers.map((layer) => layer.id);
 
     textElements.forEach((element) => {
-      if (element.deltaStart + element.inTime <= currentTime && currentTime < element.deltaStart + element.outTime) {
+      if (element.deltaStart + element.inTime <= time && time < element.deltaStart + element.outTime) {
         if (!renderer.includes(element.id)) {
           console.log('add');
           layers.push(element);
@@ -143,35 +167,31 @@ export const CanvasContainer = () => {
     });
   };
 
-  const _loop = (time) => {
-    if (paused) return;
-    update(time);
-    requestAnimationFrame(_loop);
-  };
-
   const loop = () => {
-    requestAnimationFrame(_loop);
+    if (video.paused) return;
+
+    currentTime = video.currentTime * 1000;
+    update(currentTime);
+
+    requestAnimationFrame(loop);
   };
 
   const play = () => {
-    if (!paused) return;
-    paused = false;
+    if (!video.paused) return;
+    video.play();
     loop();
   };
 
   const pause = () => {
-    paused = true;
-    firstTime = 0;
-    deltaTime += currentTime;
-    currentTime = 0;
-    setTime(deltaTime);
+    video.pause();
   };
 
   const stop = () => {
-    paused = true;
-    firstTime = 0;
+    video.pause();
+    video.currentTime = 0;
     currentTime = 0;
-    setTime(currentTime);
+    sprite.texture.update();
+    setTime(0);
     app.stage.removeChildren();
 
     layers = textElements.filter((elm) => {
@@ -181,6 +201,8 @@ export const CanvasContainer = () => {
     renderer = layers.map((layer) => {
       return layer.id;
     });
+
+    app.stage.addChild(sprite);
   };
 
   const render = (element: Text) => {
@@ -191,12 +213,39 @@ export const CanvasContainer = () => {
     return false;
   };
 
+  const getVideoResource = (texture: Texture) => {
+    // @ts-ignore
+    return texture.baseTexture.resource.source as HTMLVideoElement;
+  };
+
+  const uploadVideo: ChangeEventHandler<HTMLInputElement> = async (e) => {
+    console.log(e.currentTarget.files[0].name);
+    const video = await loadVideo(e.currentTarget.files[0]);
+    const texture = loadVideoTexture(video);
+
+    const sprite = PIXI.Sprite.from(texture);
+    sprite.width = app.view.width;
+    sprite.height = app.view.height;
+
+    app.stage.addChild(sprite);
+
+    const v = getVideoResource(sprite.texture);
+    v.pause();
+
+    setVideo(v);
+    setSprite(sprite);
+  };
+
   return (
     <div>
       <Cavnas initApp={initApp} />
       <p>{time}</p>
       <TextInput value={text} input={inputValue} />
       <TextAdd add={addTextElement} />
+
+      <p className="p-5">
+        <input type="file" onChange={uploadVideo} />
+      </p>
 
       <p className="p-5">
         <button onClick={play}>再生</button>
